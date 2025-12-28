@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "2026",
   description: "See the fireworks light up the night sky as we welcome the new year!",
+  keywords: ["New Year", "Fireworks", "Countdown", "2026", "Celebration", "new year 2026", "countdown", "fireworks", "celebration", "happy new year", "new year's eve"],
+  authors: [{ name: "Harry Ruiz", url: "https://harryruiz.com" }],
+  creator: "Harry Ruiz",
+  publisher: "Harry Ruiz",
+  metadataBase: new URL('https://2026.harryruiz.com'),
 };
 
 export default function RootLayout({
