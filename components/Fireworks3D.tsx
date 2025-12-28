@@ -195,7 +195,6 @@ export default function FireworksOnlyCursor() {
       const geometry = new THREE.SphereGeometry(0.2, 8, 8);
       const material = new THREE.MeshBasicMaterial({ 
         color: 0xffaa00,
-        emissive: 0xffaa00,
       });
       
       const rocket = new THREE.Mesh(geometry, material);
