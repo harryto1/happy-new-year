@@ -11,7 +11,7 @@ const pusher = new Pusher({
 
 export async function POST(request: NextRequest) {
     try {
-        const { x, y, clientId, color } = await request.json();
+        const { x, y, clientId, color, latitude, longitude } = await request.json();
 
         const channel = process.env.NODE_ENV === 'production'
             ? 'fireworks-channel-production'
@@ -21,7 +21,9 @@ export async function POST(request: NextRequest) {
             x,
             y,
             clientId,
-            color
+            color,
+            latitude,
+            longitude
         });
 
         return NextResponse.json({ success: true });

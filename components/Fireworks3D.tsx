@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import Pusher from "pusher-js";
 
@@ -8,32 +8,92 @@ type Firework = {
   mesh: THREE.Points;
   velocities: Float32Array;
   life: number;
-  trailMeshes: THREE.Mesh[]; // Individual trail meshes for each particle
+  trailMeshes: THREE.Mesh[];
 };
 
 type Rocket = {
   mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   targetY: number;
-  trail: THREE.Mesh; // Tube-based trail
+  trail: THREE.Mesh;
   trailPositions: THREE.Vector3[];
 };
+
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = 
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in km
+}
+
+// Calculate scale and opacity based on distance
+function getFireworkScale(distanceKm: number): { scale: number; opacity: number; zOffset: number } {
+  // Local (0-50km): Full size, full brightness
+  if (distanceKm < 50) {
+    return { scale: 1.0, opacity: 1.0, zOffset: 0 };
+  }
+  // Nearby (50-200km): Slightly smaller
+  else if (distanceKm < 200) {
+    return { scale: 0.7, opacity: 0.8, zOffset: -10 };
+  }
+  // Regional (200-1000km): Medium distance
+  else if (distanceKm < 1000) {
+    return { scale: 0.5, opacity: 0.6, zOffset: -20 };
+  }
+  // Country (1000-3000km): Small
+  else if (distanceKm < 3000) {
+    return { scale: 0.35, opacity: 0.4, zOffset: -30 };
+  }
+  // Continental (3000-8000km): Very small
+  else if (distanceKm < 8000) {
+    return { scale: 0.2, opacity: 0.25, zOffset: -40 };
+  }
+  // Global (8000km+): Tiny, pale
+  else {
+    return { scale: 0.1, opacity: 0.15, zOffset: -50 };
+  }
+}
 
 export default function FireworksOnlyCursor() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fireworks = useRef<Firework[]>([]);
   const rockets = useRef<Rocket[]>([]);
   const clientId = useRef<string>(Math.random().toString(36).substring(7));
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Get user's location on mount
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.error('Error getting location:', error);
+          // Fallback to a default location if user denies
+          setUserLocation({ latitude: 0, longitude: 0 });
+        }
+      );
+    }
+  }, []);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!containerRef.current || !userLocation) return;
 
     // Initialize Pusher
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
         cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
     });
 
-    // Use environment-aware channel name
     const channelName = process.env.NODE_ENV === 'production' 
         ? 'fireworks-channel-production' 
         : 'fireworks-channel-development';
@@ -54,7 +114,7 @@ export default function FireworksOnlyCursor() {
     // Renderer
     const renderer = new THREE.WebGLRenderer({ 
       alpha: true,
-      antialias: false, // Disable for performance
+      antialias: false,
       powerPreference: "high-performance",
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -65,10 +125,8 @@ export default function FireworksOnlyCursor() {
     const audioListener = new THREE.AudioListener();
     camera.add(audioListener);
 
-    // Audio Loader
     const audioLoader = new THREE.AudioLoader();
 
-    // Load sounds
     const launchSound = new THREE.Audio(audioListener);
     const explosionSound = new THREE.Audio(audioListener);
 
@@ -82,18 +140,19 @@ export default function FireworksOnlyCursor() {
       explosionSound.setVolume(0.7);
     });
 
-    // Helper functino to play sound (allows multiple instances)
-    const playSound = (sound: THREE.Audio) => {
+    const playSound = (sound: THREE.Audio, volume: number = 1.0) => {
         if (sound.isPlaying) {
-            // Clone the sound to play multiple instances
             const clone = sound.clone();
+            clone.setVolume(clone.getVolume() * volume);
             clone.play();
         } else {
+            const originalVolume = sound.getVolume();
+            sound.setVolume(originalVolume * volume);
             sound.play();
+            setTimeout(() => sound.setVolume(originalVolume), 100);
         }
     };
 
-    // Helper function to stop sound
     const stopSound = (sound: THREE.Audio) => {
         if (sound.isPlaying) {
             sound.stop();
@@ -170,7 +229,6 @@ export default function FireworksOnlyCursor() {
     const mouse = new THREE.Vector2();
     const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
-    // Reusable geometries pool
     const tubeGeometryCache = new Map<string, THREE.TubeGeometry>();
     
     const getTubeGeometry = (pointCount: number, radius: number, segments: number) => {
@@ -186,37 +244,38 @@ export default function FireworksOnlyCursor() {
       return tubeGeometryCache.get(key)!.clone();
     };
 
-    // Launch rocket with tube trail
-    const launchRocket = (targetX: number, targetY: number, color?: THREE.Color) => {
+    // Launch rocket with distance-based scaling
+    const launchRocket = (targetX: number, targetY: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0, zOffset: number = 0) => {
       const rocketColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
 
-      playSound(launchSound);
+      playSound(launchSound, opacity);
 
-      const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+      const geometry = new THREE.SphereGeometry(0.2 * scale, 8, 8);
       const material = new THREE.MeshBasicMaterial({ 
         color: 0xffaa00,
+        transparent: true,
+        opacity: opacity,
       });
       
       const rocket = new THREE.Mesh(geometry, material);
       const bottomY = -30;
-      rocket.position.set(targetX, bottomY, 0);
+      rocket.position.set(targetX, bottomY, zOffset);
       
-      const speed = 1.2;
+      const speed = 1.2 * scale;
       const driftX = (Math.random() - 0.5) * 0.15;
       const driftZ = (Math.random() - 0.5) * 0.1;
       const velocity = new THREE.Vector3(driftX, speed, driftZ);
 
-      // Create initial trail curve
       const curve = new THREE.CatmullRomCurve3([
-        new THREE.Vector3(targetX, bottomY, 0),
-        new THREE.Vector3(targetX, bottomY, 0),
+        new THREE.Vector3(targetX, bottomY, zOffset),
+        new THREE.Vector3(targetX, bottomY, zOffset),
       ]);
 
-      const tubeGeometry = new THREE.TubeGeometry(curve, 6, 0.08, 4, false); // Reduced segments
+      const tubeGeometry = new THREE.TubeGeometry(curve, 6, 0.08 * scale, 4, false);
       const tubeMaterial = new THREE.MeshBasicMaterial({
         color: 0xffaa00,
         transparent: true,
-        opacity: 0.6,
+        opacity: 0.6 * opacity,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
       });
@@ -234,15 +293,17 @@ export default function FireworksOnlyCursor() {
       });
 
       (rocket as any).fireworkColor = rocketColor;
+      (rocket as any).fireworkScale = scale;
+      (rocket as any).fireworkOpacity = opacity;
       return rocketColor; 
     };
 
-    // Explosion function with individual particle trails
-    const explode = (x: number, y: number, color?: THREE.Color) => {
+    // Explosion with distance-based scaling
+    const explode = (x: number, y: number, z: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0) => {
       stopSound(launchSound);
-      playSound(explosionSound);
+      playSound(explosionSound, opacity);
       
-      const count = 60; // Reduced from 80
+      const count = Math.floor(60 * scale);
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(count * 3);
       const velocities = new Float32Array(count * 3);
@@ -250,11 +311,11 @@ export default function FireworksOnlyCursor() {
       for (let i = 0; i < count; i++) {
         positions[i * 3] = x;
         positions[i * 3 + 1] = y;
-        positions[i * 3 + 2] = 0;
+        positions[i * 3 + 2] = z;
 
         const theta = Math.random() * Math.PI * 2;
         const phi = Math.acos(2 * Math.random() - 1);
-        const speed = Math.random() * 0.6 + 0.3;
+        const speed = (Math.random() * 0.6 + 0.3) * scale;
 
         velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
         velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
@@ -266,9 +327,9 @@ export default function FireworksOnlyCursor() {
       const particleColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
 
       const material = new THREE.PointsMaterial({
-        size: 0.35, // Slightly larger to compensate for fewer particles
+        size: 0.35 * scale,
         transparent: true,
-        opacity: 1,
+        opacity: opacity,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
         color: particleColor,
@@ -277,33 +338,30 @@ export default function FireworksOnlyCursor() {
       const points = new THREE.Points(geometry, material);
       scene.add(points);
 
-      // Create trail mesh for each particle with optimizations
       const trailMeshes: THREE.Mesh[] = [];
       
-      // Shared material for all trails of this firework
       const sharedTrailMaterial = new THREE.MeshBasicMaterial({
         color: particleColor,
         transparent: true,
-        opacity: 0.5,
+        opacity: 0.5 * opacity,
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
       });
 
       for (let i = 0; i < count; i++) {
         const curve = new THREE.CatmullRomCurve3([
-          new THREE.Vector3(x, y, 0),
-          new THREE.Vector3(x, y, 0),
+          new THREE.Vector3(x, y, z),
+          new THREE.Vector3(x, y, z),
         ]);
 
-        const tubeGeometry = new THREE.TubeGeometry(curve, 4, 0.04, 3, false); // Minimal segments
+        const tubeGeometry = new THREE.TubeGeometry(curve, 4, 0.04 * scale, 3, false);
 
         const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
-        trailMesh.frustumCulled = true; // Enable frustum culling
+        trailMesh.frustumCulled = true;
         scene.add(trailMesh);
         trailMeshes.push(trailMesh);
 
-        // Store particle history on mesh
-        (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, 0)];
+        (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
       }
 
       fireworks.current.push({ 
@@ -333,31 +391,58 @@ export default function FireworksOnlyCursor() {
         await fetch("/api/firework", {
             method: "POST",
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ x: normalizedX, y: normalizedY, clientId: clientId.current, color: color.getHex() }),
+            body: JSON.stringify({ 
+              x: normalizedX, 
+              y: normalizedY, 
+              clientId: clientId.current, 
+              color: color.getHex(),
+              latitude: userLocation.latitude,
+              longitude: userLocation.longitude
+            }),
         });
       } catch (error) {
         console.log('Failed to trigger firework: ', error);
       }
     };
 
-    channel.bind('new-firework', (data: { x:number; y:number; clientId: string; color: number }) => {
+    channel.bind('new-firework', (data: { x:number; y:number; clientId: string; color: number; latitude?: number; longitude?: number }) => {
         if (data.clientId === clientId.current) return;
+        
         const worldX = data.x * 300 - 150;
         const worldY = data.y * 150 - 75;
-        const color = new THREE.Color(data.color); 
-        launchRocket(worldX, worldY, color);
+        const color = new THREE.Color(data.color);
+        
+        // Calculate distance and scale
+        let scale = 1.0;
+        let opacity = 1.0;
+        let zOffset = 0;
+        
+        if (data.latitude && data.longitude) {
+          const distance = calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            data.latitude,
+            data.longitude
+          );
+          const scaleData = getFireworkScale(distance);
+          scale = scaleData.scale;
+          opacity = scaleData.opacity;
+          zOffset = scaleData.zOffset;
+        }
+        
+        launchRocket(worldX, worldY, color, scale, opacity, zOffset);
     });
 
     channel.bind('happy-new-year', () => {
       const fireworkCount = 20;
-      const centerY = 0; // Vertical center in world coordinates
+      const centerY = 0;
       
       for (let i = 0; i < fireworkCount; i++) {
         setTimeout(() => {
-          const randomX = (Math.random() - 0.5) * 200; // Spread across horizontal
+          const randomX = (Math.random() - 0.5) * 200;
           const color = new THREE.Color().setHSL(Math.random(), 1, 0.6);
           launchRocket(randomX, centerY, color);
-        }, i * 100); // Stagger launches by 100ms
+        }, i * 100);
       }
     });
 
@@ -365,7 +450,6 @@ export default function FireworksOnlyCursor() {
 
     let frameCount = 0;
 
-    // Animation loop
     const animate = () => {
       requestAnimationFrame(animate);
       const time = Date.now() * 0.001;
@@ -373,30 +457,29 @@ export default function FireworksOnlyCursor() {
 
       starMaterial.uniforms.time.value = time;
 
-      // Update rockets with tube trails
       rockets.current.forEach((rocket, i) => {
         rocket.velocity.y -= 0.0005;
         rocket.velocity.x += (Math.random() - 0.5) * 0.2;
         rocket.velocity.z += (Math.random() - 0.5) * 0.1;
         rocket.mesh.position.add(rocket.velocity);
 
-        // Update trail positions
         rocket.trailPositions.push(rocket.mesh.position.clone());
         const maxTrailLength = 5;
         if (rocket.trailPositions.length > maxTrailLength) {
           rocket.trailPositions.shift();
         }
 
-        // Recreate tube geometry with updated curve (less frequently)
-        if (rocket.trailPositions.length >= 2 && frameCount % 2 === 0) { // Update every other frame
+        if (rocket.trailPositions.length >= 2 && frameCount % 2 === 0) {
           const curve = new THREE.CatmullRomCurve3(rocket.trailPositions);
           rocket.trail.geometry.dispose();
           rocket.trail.geometry = new THREE.TubeGeometry(curve, Math.min(rocket.trailPositions.length, 6), 0.08, 4, false);
         }
 
         if (rocket.mesh.position.y >= rocket.targetY || rocket.velocity.y < 0) {
-          const storedColor = (rocket.mesh as any).fireworkColor; 
-          explode(rocket.mesh.position.x, rocket.mesh.position.y, storedColor);
+          const storedColor = (rocket.mesh as any).fireworkColor;
+          const storedScale = (rocket.mesh as any).fireworkScale || 1.0;
+          const storedOpacity = (rocket.mesh as any).fireworkOpacity || 1.0;
+          explode(rocket.mesh.position.x, rocket.mesh.position.y, rocket.mesh.position.z, storedColor, storedScale, storedOpacity);
           
           scene.remove(rocket.mesh);
           scene.remove(rocket.trail);
@@ -408,37 +491,31 @@ export default function FireworksOnlyCursor() {
         }
       });
 
-      // Update fireworks with particle trails (optimized batching)
       fireworks.current.forEach((fw, i) => {
         const pos = fw.mesh.geometry.attributes.position.array as Float32Array;
         const particleCount = pos.length / 3;
 
-        // Batch geometry updates
-        const needsUpdate = frameCount % 2 === 0; // Update trails every other frame
+        const needsUpdate = frameCount % 2 === 0;
 
         for (let j = 0; j < particleCount; j++) {
           const idx = j * 3;
 
-          // Update particle position
           pos[idx] += fw.velocities[idx];
           pos[idx + 1] += fw.velocities[idx + 1];
           pos[idx + 2] += fw.velocities[idx + 2];
           fw.velocities[idx + 1] -= 0.01;
 
-          // Update trail for this particle (less frequently)
           if (needsUpdate && fw.trailMeshes[j]) {
             const trailMesh = fw.trailMeshes[j];
             const history = (trailMesh as any).particleHistory as THREE.Vector3[];
             
-            // Add current position to history
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = 10; // Reduced from 15
+            const maxHistory = 10;
             if (history.length > maxHistory) {
               history.shift();
             }
 
-            // Update tube geometry with minimal segments
             if (history.length >= 2) {
               const curve = new THREE.CatmullRomCurve3(history);
               trailMesh.geometry.dispose();
@@ -453,7 +530,6 @@ export default function FireworksOnlyCursor() {
         const material = fw.mesh.material as THREE.PointsMaterial;
         material.opacity = fw.life / 100;
 
-        // Update trail opacity (shared material)
         if (fw.trailMeshes.length > 0) {
           const trailMat = fw.trailMeshes[0].material as THREE.MeshBasicMaterial;
           trailMat.opacity = (fw.life / 100) * 0.5;
@@ -464,13 +540,11 @@ export default function FireworksOnlyCursor() {
           fw.mesh.geometry.dispose();
           material.dispose();
 
-          // Clean up trail meshes
           const sharedMaterial = fw.trailMeshes[0]?.material;
           fw.trailMeshes.forEach(tm => {
             scene.remove(tm);
             tm.geometry.dispose();
           });
-          // Dispose shared material once
           if (sharedMaterial) {
             (sharedMaterial as THREE.Material).dispose();
           }
@@ -503,7 +577,7 @@ export default function FireworksOnlyCursor() {
       tubeGeometryCache.forEach(geom => geom.dispose());
       containerRef.current?.removeChild(renderer.domElement);
     };
-  }, []);
+  }, [userLocation]);
 
   return <div ref={containerRef} className="fixed inset-0 pointer-events-auto" />;
 }
