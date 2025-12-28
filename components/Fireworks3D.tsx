@@ -348,6 +348,19 @@ export default function FireworksOnlyCursor() {
         launchRocket(worldX, worldY, color);
     });
 
+    channel.bind('happy-new-year', () => {
+      const fireworkCount = 20;
+      const centerY = 0; // Vertical center in world coordinates
+      
+      for (let i = 0; i < fireworkCount; i++) {
+        setTimeout(() => {
+          const randomX = (Math.random() - 0.5) * 200; // Spread across horizontal
+          const color = new THREE.Color().setHSL(Math.random(), 1, 0.6);
+          launchRocket(randomX, centerY, color);
+        }, i * 100); // Stagger launches by 100ms
+      }
+    });
+
     window.addEventListener("click", handleClick);
 
     let frameCount = 0;
