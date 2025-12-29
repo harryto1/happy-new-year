@@ -9,6 +9,7 @@ type Firework = {
   velocities: Float32Array;
   life: number;
   trailMeshes: THREE.Mesh[];
+  priority: number; // For garbage collection
 };
 
 type Rocket = {
@@ -66,6 +67,11 @@ export default function FireworksOnlyCursor() {
   const rockets = useRef<Rocket[]>([]);
   const clientId = useRef<string>(Math.random().toString(36).substring(7));
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+
+  // Performance caps
+  const MAX_FIREWORKS = 15; // Maximum simultaneous firework explosions
+  const MAX_ROCKETS = 10; // Maximum rockets in flight
+  const MAX_PARTICLES_PER_FIREWORK = 40; // Reduced from 60
 
   // Get user's location on mount
   useEffect(() => {
@@ -160,7 +166,7 @@ export default function FireworksOnlyCursor() {
     }
 
     // === STARS ===
-    const starCount = 800;
+    const starCount = 500; // Reduced from 800
     const starGeometry = new THREE.BufferGeometry();
     const starPositions = new Float32Array(starCount * 3);
     const starSizes = new Float32Array(starCount);
@@ -229,28 +235,75 @@ export default function FireworksOnlyCursor() {
     const mouse = new THREE.Vector2();
     const clickPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
-    const tubeGeometryCache = new Map<string, THREE.TubeGeometry>();
-    
-    const getTubeGeometry = (pointCount: number, radius: number, segments: number) => {
-      const key = `${pointCount}-${radius}-${segments}`;
-      if (!tubeGeometryCache.has(key)) {
-        const points: THREE.Vector3[] = [];
-        for (let i = 0; i < pointCount; i++) {
-          points.push(new THREE.Vector3(0, i * 0.1, 0));
+    // Reusable geometries - no cache needed, create once
+    const rocketGeometry = new THREE.SphereGeometry(0.2, 6, 6); // Reduced segments from 8,8
+
+    // Garbage collector for fireworks
+    const cleanupOldFireworks = () => {
+      if (fireworks.current.length <= MAX_FIREWORKS) return;
+
+      // Sort by priority (lower = remove first) and age (life)
+      fireworks.current.sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return a.life - b.life;
+      });
+
+      // Remove excess fireworks
+      const toRemove = fireworks.current.length - MAX_FIREWORKS;
+      for (let i = 0; i < toRemove; i++) {
+        const fw = fireworks.current[i];
+        scene.remove(fw.mesh);
+        fw.mesh.geometry.dispose();
+        (fw.mesh.material as THREE.Material).dispose();
+
+        const sharedMaterial = fw.trailMeshes[0]?.material;
+        fw.trailMeshes.forEach(tm => {
+          scene.remove(tm);
+          tm.geometry.dispose();
+        });
+        if (sharedMaterial) {
+          (sharedMaterial as THREE.Material).dispose();
         }
-        const curve = new THREE.CatmullRomCurve3(points);
-        tubeGeometryCache.set(key, new THREE.TubeGeometry(curve, segments, radius, 3, false));
       }
-      return tubeGeometryCache.get(key)!.clone();
+
+      fireworks.current = fireworks.current.slice(toRemove);
+    };
+
+    // Garbage collector for rockets
+    const cleanupOldRockets = () => {
+      if (rockets.current.length <= MAX_ROCKETS) return;
+
+      const toRemove = rockets.current.length - MAX_ROCKETS;
+      for (let i = 0; i < toRemove; i++) {
+        const rocket = rockets.current[i];
+        scene.remove(rocket.mesh);
+        scene.remove(rocket.trail);
+        rocket.mesh.geometry.dispose();
+        (rocket.mesh.material as THREE.Material).dispose();
+        rocket.trail.geometry.dispose();
+        (rocket.trail.material as THREE.Material).dispose();
+      }
+
+      rockets.current = rockets.current.slice(toRemove);
     };
 
     // Launch rocket with distance-based scaling
     const launchRocket = (targetX: number, targetY: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0, zOffset: number = 0) => {
+      // Check rocket cap
+      if (rockets.current.length >= MAX_ROCKETS) {
+        cleanupOldRockets();
+      }
+
       const rocketColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
 
-      playSound(launchSound, opacity);
+      // Only play sound for close fireworks to reduce audio overhead
+      if (opacity > 0.5) {
+        playSound(launchSound, opacity);
+      }
 
-      const geometry = new THREE.SphereGeometry(0.2 * scale, 8, 8);
+      const geometry = rocketGeometry.clone();
+      geometry.scale(scale, scale, scale);
+      
       const material = new THREE.MeshBasicMaterial({ 
         color: 0xffaa00,
         transparent: true,
@@ -271,7 +324,7 @@ export default function FireworksOnlyCursor() {
         new THREE.Vector3(targetX, bottomY, zOffset),
       ]);
 
-      const tubeGeometry = new THREE.TubeGeometry(curve, 6, 0.08 * scale, 4, false);
+      const tubeGeometry = new THREE.TubeGeometry(curve, 4, 0.08 * scale, 3, false); // Reduced segments
       const tubeMaterial = new THREE.MeshBasicMaterial({
         color: 0xffaa00,
         transparent: true,
@@ -300,10 +353,22 @@ export default function FireworksOnlyCursor() {
 
     // Explosion with distance-based scaling
     const explode = (x: number, y: number, z: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0) => {
+      // Check firework cap before creating new one
+      if (fireworks.current.length >= MAX_FIREWORKS) {
+        cleanupOldFireworks();
+      }
+
       stopSound(launchSound);
-      playSound(explosionSound, opacity);
       
-      const count = Math.floor(60 * Math.max(scale, 0.5));
+      // Only play sound for close fireworks
+      if (opacity > 0.5) {
+        playSound(explosionSound, opacity);
+      }
+      
+      // Reduce particle count based on scale and distance
+      const baseCount = Math.min(MAX_PARTICLES_PER_FIREWORK, Math.floor(60 * scale));
+      const count = Math.max(baseCount, 15); // Minimum 15 particles
+      
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(count * 3);
       const velocities = new Float32Array(count * 3);
@@ -351,35 +416,45 @@ export default function FireworksOnlyCursor() {
 
       const trailMeshes: THREE.Mesh[] = [];
       
-      const sharedTrailMaterial = new THREE.MeshBasicMaterial({
-        color: adjustedColor,
-        transparent: true,
-        opacity: 0.5 * opacity,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-      });
+      // Only add trails for closer/larger fireworks to save performance
+      if (scale > 0.5) {
+        const sharedTrailMaterial = new THREE.MeshBasicMaterial({
+          color: adjustedColor,
+          transparent: true,
+          opacity: 0.5 * opacity,
+          blending: THREE.AdditiveBlending,
+          side: THREE.DoubleSide,
+        });
 
-      for (let i = 0; i < count; i++) {
-        const curve = new THREE.CatmullRomCurve3([
-          new THREE.Vector3(x, y, z),
-          new THREE.Vector3(x, y, z),
-        ]);
+        // Reduce trail count for distant fireworks
+        const trailCount = Math.floor(count * Math.max(scale, 0.3));
+        
+        for (let i = 0; i < trailCount; i++) {
+          const curve = new THREE.CatmullRomCurve3([
+            new THREE.Vector3(x, y, z),
+            new THREE.Vector3(x, y, z),
+          ]);
 
-        const tubeGeometry = new THREE.TubeGeometry(curve, 4, 0.04 * scale, 3, false);
+          const tubeGeometry = new THREE.TubeGeometry(curve, 3, 0.04 * scale, 3, false); // Reduced segments
 
-        const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
-        trailMesh.frustumCulled = true;
-        scene.add(trailMesh);
-        trailMeshes.push(trailMesh);
+          const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
+          trailMesh.frustumCulled = true;
+          scene.add(trailMesh);
+          trailMeshes.push(trailMesh);
 
-        (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
+          (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
+        }
       }
+
+      // Priority based on scale/opacity - higher priority = kept longer
+      const priority = Math.floor(scale * 10 + opacity * 10);
 
       fireworks.current.push({ 
         mesh: points, 
         velocities, 
         life: 100,
         trailMeshes,
+        priority,
       });
 
       (points as any).fireworkScale = scale;
@@ -431,12 +506,18 @@ export default function FireworksOnlyCursor() {
         let opacity = 1.0;
         let zOffset = 0;
 
+        const testData = {
+          // Latitude and longitude of Tokyo
+          latitude: 35.6895,
+          longitude: 139.6917
+        }
+
         if (data.latitude && data.longitude) {
           const distance = calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
-            data.latitude,
-            data.longitude
+            testData.latitude,
+            testData.longitude
           );
           const scaleData = getFireworkScale(distance);
           scale = scaleData.scale;
@@ -448,7 +529,7 @@ export default function FireworksOnlyCursor() {
     });
 
     channel.bind('happy-new-year', () => {
-      const fireworkCount = 20;
+      const fireworkCount = 15; // Reduced from 20
       const centerY = 0;
       
       for (let i = 0; i < fireworkCount; i++) {
@@ -456,7 +537,7 @@ export default function FireworksOnlyCursor() {
           const randomX = (Math.random() - 0.5) * 200;
           const color = new THREE.Color().setHSL(Math.random(), 1, 0.6);
           launchRocket(randomX, centerY, color);
-        }, i * 100);
+        }, i * 150); // Slightly longer delay
       }
     });
 
@@ -486,7 +567,7 @@ export default function FireworksOnlyCursor() {
         if (rocket.trailPositions.length >= 2 && frameCount % 2 === 0) {
           const curve = new THREE.CatmullRomCurve3(rocket.trailPositions);
           rocket.trail.geometry.dispose();
-          rocket.trail.geometry = new THREE.TubeGeometry(curve, Math.min(rocket.trailPositions.length, 6), 0.08, 4, false);
+          rocket.trail.geometry = new THREE.TubeGeometry(curve, Math.min(rocket.trailPositions.length, 4), 0.08, 3, false); // Reduced segments
         }
 
         if (rocket.mesh.position.y >= rocket.targetY || rocket.velocity.y < 0) {
@@ -513,7 +594,7 @@ export default function FireworksOnlyCursor() {
 
         // Adjust gravity based on scale - smaller/distant fireworks have less gravity 
         const storedScale = (fw.mesh as any).fireworkScale || 1.0;
-        const gravity = 0.01 * Math.max(storedScale, 0.4); // Reduce gravity for distant fireworks
+        const gravity = 0.01 * Math.max(storedScale, 0.4);
 
         for (let j = 0; j < particleCount; j++) {
           const idx = j * 3;
@@ -521,15 +602,16 @@ export default function FireworksOnlyCursor() {
           pos[idx] += fw.velocities[idx];
           pos[idx + 1] += fw.velocities[idx + 1];
           pos[idx + 2] += fw.velocities[idx + 2];
-          fw.velocities[idx + 1] -= gravity; // Use adjusted gravity
+          fw.velocities[idx + 1] -= gravity;
 
-          if (needsUpdate && fw.trailMeshes[j]) {
+          // Only update trails for larger fireworks and every other frame
+          if (needsUpdate && fw.trailMeshes[j] && storedScale > 0.5) {
             const trailMesh = fw.trailMeshes[j];
             const history = (trailMesh as any).particleHistory as THREE.Vector3[];
             
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = 10;
+            const maxHistory = 8; // Reduced from 10
             if (history.length > maxHistory) {
               history.shift();
             }
@@ -537,7 +619,7 @@ export default function FireworksOnlyCursor() {
             if (history.length >= 2) {
               const curve = new THREE.CatmullRomCurve3(history);
               trailMesh.geometry.dispose();
-              trailMesh.geometry = new THREE.TubeGeometry(curve, Math.min(history.length, 8), 0.04, 3, false);
+              trailMesh.geometry = new THREE.TubeGeometry(curve, Math.min(history.length, 6), 0.04, 3, false); // Reduced segments
             }
           }
         }
@@ -592,7 +674,7 @@ export default function FireworksOnlyCursor() {
       renderer.dispose();
       starMaterial.dispose();
       starGeometry.dispose();
-      tubeGeometryCache.forEach(geom => geom.dispose());
+      rocketGeometry.dispose();
       containerRef.current?.removeChild(renderer.domElement);
     };
   }, [userLocation]);
