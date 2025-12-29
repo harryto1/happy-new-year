@@ -40,23 +40,23 @@ function getFireworkScale(distanceKm: number): { scale: number; opacity: number;
   }
   // Nearby (50-200km): Slightly smaller
   else if (distanceKm < 200) {
-    return { scale: 0.85, opacity: 0.9, zOffset: -5 };
+    return { scale: 0.8, opacity: 0.9, zOffset: -10 };
   }
   // Regional (200-1000km): Medium distance
   else if (distanceKm < 1000) {
-    return { scale: 0.7, opacity: 0.75, zOffset: -10 };
+    return { scale: 0.65, opacity: 0.75, zOffset: -20 };
   }
   // Country (1000-3000km): Small
   else if (distanceKm < 3000) {
-    return { scale: 0.55, opacity: 0.6, zOffset: -15 };
+    return { scale: 0.45, opacity: 0.6, zOffset: -30 };
   }
   // Continental (3000-8000km): Very small
   else if (distanceKm < 8000) {
-    return { scale: 0.4, opacity: 0.45, zOffset: -20 };
+    return { scale: 0.35, opacity: 0.45, zOffset: -40 };
   }
   // Global (8000km+): Tiny, pale
   else {
-    return { scale: 0.25, opacity: 0.3, zOffset: -25 };
+    return { scale: 0.175, opacity: 0.3, zOffset: -50 };
   }
 }
 
