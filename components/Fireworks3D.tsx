@@ -429,6 +429,8 @@ export default function FireworksOnlyCursor() {
           opacity = scaleData.opacity;
           zOffset = scaleData.zOffset;
         }
+
+        console.log(`Scale: ${scale}, Opacity: ${opacity}, zOffset: ${zOffset}`);
         
         launchRocket(worldX, worldY, color, scale, opacity, zOffset);
     });
