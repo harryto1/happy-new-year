@@ -416,34 +416,31 @@ export default function FireworksOnlyCursor() {
 
       const trailMeshes: THREE.Mesh[] = [];
       
-      // Only add trails for closer/larger fireworks to save performance
-      if (scale > 0) {
-        const sharedTrailMaterial = new THREE.MeshBasicMaterial({
-          color: adjustedColor,
-          transparent: true,
-          opacity: 0.5 * opacity,
-          blending: THREE.AdditiveBlending,
-          side: THREE.DoubleSide,
-        });
+      const sharedTrailMaterial = new THREE.MeshBasicMaterial({
+        color: adjustedColor,
+        transparent: true,
+        opacity: 0.5 * opacity,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      });
 
-        // Reduce trail count for distant fireworks
-        const trailCount = Math.floor(count * Math.max(scale, 0.3));
-        
-        for (let i = 0; i < trailCount; i++) {
-          const curve = new THREE.CatmullRomCurve3([
-            new THREE.Vector3(x, y, z),
-            new THREE.Vector3(x, y, z),
-          ]);
+      // Reduce trail count for distant fireworks
+      const trailCount = Math.floor(count * Math.max(scale, 0.3));
+      
+      for (let i = 0; i < trailCount; i++) {
+        const curve = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(x, y, z),
+          new THREE.Vector3(x, y, z),
+        ]);
 
-          const tubeGeometry = new THREE.TubeGeometry(curve, 3, 0.04 * scale, 3, false); // Reduced segments
+        const tubeGeometry = new THREE.TubeGeometry(curve, 3, 0.04 * scale, 3, false); // Reduced segments
 
-          const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
-          trailMesh.frustumCulled = true;
-          scene.add(trailMesh);
-          trailMeshes.push(trailMesh);
+        const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
+        trailMesh.frustumCulled = true;
+        scene.add(trailMesh);
+        trailMeshes.push(trailMesh);
 
-          (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
-        }
+        (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
       }
 
       // Priority based on scale/opacity - higher priority = kept longer
@@ -605,13 +602,13 @@ export default function FireworksOnlyCursor() {
           fw.velocities[idx + 1] -= gravity;
 
           // Only update trails for larger fireworks and every other frame
-          if (needsUpdate && fw.trailMeshes[j] && storedScale > 0.5) {
+          if (needsUpdate && fw.trailMeshes[j]) {
             const trailMesh = fw.trailMeshes[j];
             const history = (trailMesh as any).particleHistory as THREE.Vector3[];
             
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = 8; // Reduced from 10
+            const maxHistory = Math.max(4, Math.floor(8 * storedScale));
             if (history.length > maxHistory) {
               history.shift();
             }
