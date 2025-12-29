@@ -418,8 +418,8 @@ export default function FireworksOnlyCursor() {
         let zOffset = 0;
 
         const testLocation = {
-          latitude: 35.6752,
-          longitude: 139.7528
+          latitude: userLocation.latitude + 0.9, // Approx 100km north
+          longitude: userLocation.longitude + 0.9
         }
 
         console.log(`External Latitude: ${data.latitude!}, External Longitude: ${data.longitude!}`);
