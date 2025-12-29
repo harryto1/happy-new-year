@@ -170,7 +170,7 @@ export default function FireworksOnlyCursor() {
       if (masterVolumeRef.current === 0) return; 
 
       const context = audioListener.context; 
-      if (context.state === 'suspended') {
+      if (context.state === 'suspended' || context.state === 'interrupted' || context.state === 'closed') {
         context.resume();
       }
 
