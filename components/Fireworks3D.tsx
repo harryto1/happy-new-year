@@ -417,7 +417,7 @@ export default function FireworksOnlyCursor() {
       const trailMeshes: THREE.Mesh[] = [];
       
       // Only add trails for closer/larger fireworks to save performance
-      if (scale > 0.5) {
+      if (scale > 0) {
         const sharedTrailMaterial = new THREE.MeshBasicMaterial({
           color: adjustedColor,
           transparent: true,
