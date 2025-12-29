@@ -608,7 +608,7 @@ export default function FireworksOnlyCursor() {
             
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = Math.max(4, Math.floor(8 * storedScale));
+            const maxHistory = 8;
             if (history.length > maxHistory) {
               history.shift();
             }
