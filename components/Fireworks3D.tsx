@@ -326,13 +326,24 @@ export default function FireworksOnlyCursor() {
 
       const particleColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
 
+      const adjustedColor = particleColor.clone();
+      if (opacity < 1.0) {
+        const hsl = { h: 0, s: 0, l: 0 };
+        adjustedColor.getHSL(hsl);
+        adjustedColor.setHSL(
+          hsl.h,
+          hsl.s * (0.3 + opacity * 0.7),
+          Math.min(hsl.l + (1 - opacity) * 0.3, 0.9)
+        );
+      }
+
       const material = new THREE.PointsMaterial({
         size: 0.35 * Math.max(scale, 0.6),
         transparent: true,
         opacity: opacity,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
-        color: particleColor,
+        color: adjustedColor,
       });
 
       const points = new THREE.Points(geometry, material);
@@ -341,7 +352,7 @@ export default function FireworksOnlyCursor() {
       const trailMeshes: THREE.Mesh[] = [];
       
       const sharedTrailMaterial = new THREE.MeshBasicMaterial({
-        color: particleColor,
+        color: adjustedColor,
         transparent: true,
         opacity: 0.5 * opacity,
         blending: THREE.AdditiveBlending,
@@ -370,6 +381,9 @@ export default function FireworksOnlyCursor() {
         life: 100,
         trailMeshes,
       });
+
+      (points as any).fireworkScale = scale;
+      (points as any).fireworkOpacity = opacity;
     };
 
     const getClickWorldPosition = (event: MouseEvent) => {
@@ -507,13 +521,17 @@ export default function FireworksOnlyCursor() {
 
         const needsUpdate = frameCount % 2 === 0;
 
+        // Adjust gravity based on scale - smaller/distant fireworks have less gravity 
+        const storedScale = (fw.mesh as any).fireworkScale || 1.0;
+        const gravity = 0.01 * Math.max(storedScale, 0.4); // Reduce gravity for distant fireworks
+
         for (let j = 0; j < particleCount; j++) {
           const idx = j * 3;
 
           pos[idx] += fw.velocities[idx];
           pos[idx + 1] += fw.velocities[idx + 1];
           pos[idx + 2] += fw.velocities[idx + 2];
-          fw.velocities[idx + 1] -= 0.01;
+          fw.velocities[idx + 1] -= gravity; // Use adjusted gravity
 
           if (needsUpdate && fw.trailMeshes[j]) {
             const trailMesh = fw.trailMeshes[j];
