@@ -37,8 +37,8 @@ export async function POST(request: NextRequest) {
 
         const recentTimestamps = timestamps.filter(t => now - t < 1000);
 
-        if (recentTimestamps.length >= 10) {
-            return NextResponse.json({ error: 'Rate limit exceeded. Maximum 10 fireworks per second.' }, { status: 429 });
+        if (recentTimestamps.length >= 5) {
+            return NextResponse.json({ error: 'Rate limit exceeded. Maximum 5 fireworks per second.' }, { status: 429 });
         }
 
         recentTimestamps.push(now);
