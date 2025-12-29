@@ -40,23 +40,23 @@ function getFireworkScale(distanceKm: number): { scale: number; opacity: number;
   }
   // Nearby (50-200km): Slightly smaller
   else if (distanceKm < 200) {
-    return { scale: 0.7, opacity: 0.8, zOffset: -10 };
+    return { scale: 0.85, opacity: 0.9, zOffset: -5 };
   }
   // Regional (200-1000km): Medium distance
   else if (distanceKm < 1000) {
-    return { scale: 0.5, opacity: 0.6, zOffset: -20 };
+    return { scale: 0.7, opacity: 0.75, zOffset: -10 };
   }
   // Country (1000-3000km): Small
   else if (distanceKm < 3000) {
-    return { scale: 0.35, opacity: 0.4, zOffset: -30 };
+    return { scale: 0.55, opacity: 0.6, zOffset: -15 };
   }
   // Continental (3000-8000km): Very small
   else if (distanceKm < 8000) {
-    return { scale: 0.2, opacity: 0.25, zOffset: -40 };
+    return { scale: 0.4, opacity: 0.45, zOffset: -20 };
   }
   // Global (8000km+): Tiny, pale
   else {
-    return { scale: 0.1, opacity: 0.15, zOffset: -50 };
+    return { scale: 0.25, opacity: 0.3, zOffset: -25 };
   }
 }
 
@@ -261,9 +261,9 @@ export default function FireworksOnlyCursor() {
       const bottomY = -30;
       rocket.position.set(targetX, bottomY, zOffset);
       
-      const speed = 1.2 * scale;
-      const driftX = (Math.random() - 0.5) * 0.15;
-      const driftZ = (Math.random() - 0.5) * 0.1;
+      const speed = 1.2 * Math.max(scale, 0.8);
+      const driftX = (Math.random() - 0.5) * 0.15 * scale;
+      const driftZ = (Math.random() - 0.5) * 0.1 * scale;
       const velocity = new THREE.Vector3(driftX, speed, driftZ);
 
       const curve = new THREE.CatmullRomCurve3([
@@ -303,7 +303,7 @@ export default function FireworksOnlyCursor() {
       stopSound(launchSound);
       playSound(explosionSound, opacity);
       
-      const count = Math.floor(60 * scale);
+      const count = Math.floor(60 * Math.max(scale, 0.5));
       const geometry = new THREE.BufferGeometry();
       const positions = new Float32Array(count * 3);
       const velocities = new Float32Array(count * 3);
@@ -327,7 +327,7 @@ export default function FireworksOnlyCursor() {
       const particleColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
 
       const material = new THREE.PointsMaterial({
-        size: 0.35 * scale,
+        size: 0.35 * Math.max(scale, 0.6),
         transparent: true,
         opacity: opacity,
         depthWrite: false,
