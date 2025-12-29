@@ -503,18 +503,12 @@ export default function FireworksOnlyCursor() {
         let opacity = 1.0;
         let zOffset = 0;
 
-        const testData = {
-          // Latitude and longitude of Tokyo
-          latitude: 35.6895,
-          longitude: 139.6917
-        }
-
         if (data.latitude && data.longitude) {
           const distance = calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
-            testData.latitude,
-            testData.longitude
+            data.latitude,
+            data.longitude
           );
           const scaleData = getFireworkScale(distance);
           scale = scaleData.scale;
