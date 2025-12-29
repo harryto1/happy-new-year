@@ -416,7 +416,10 @@ export default function FireworksOnlyCursor() {
         let scale = 1.0;
         let opacity = 1.0;
         let zOffset = 0;
-        
+
+        console.log(`External Latitude: ${data.latitude!}, External Longitude: ${data.longitude!}`);
+        console.log(`User Latitude: ${userLocation.latitude}, User Longitude: ${userLocation.longitude}`);
+
         if (data.latitude && data.longitude) {
           const distance = calculateDistance(
             userLocation.latitude,
