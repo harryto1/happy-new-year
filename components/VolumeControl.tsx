@@ -56,8 +56,16 @@ export default function VolumeControl() {
         }
     };
 
+    // Prevent click events from propagating to underlying elements
+    const handleClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+    }
+
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full px-4 py-3 border border-white/20 shadow-2xl">
+        <div 
+            className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full px-4 py-3 border border-white/20 shadow-2xl pointer-events-auto"
+            onClick={handleClick}
+        >
             <button
                 onClick={toggleMute}
                 className="text-white hover:text-white/80 transition-colors focus:outline-none"
