@@ -138,6 +138,23 @@ export default function FireworksOnlyCursor() {
     const launchSound = new THREE.Audio(audioListener);
     const explosionSound = new THREE.Audio(audioListener);
 
+    const masterVolumeRef = { current: 0.7 }; // Use ref object instead of variable
+
+    if (typeof window !== "undefined") {
+      const savedVolume = localStorage.getItem("fireworks-volume");
+      const savedMuted = localStorage.getItem("fireworks-muted");
+
+      if (savedVolume && savedMuted !== "true") {
+        masterVolumeRef.current = parseInt(savedVolume) / 100;
+      } else if (savedMuted === "true") {
+        masterVolumeRef.current = 0;
+      }
+
+      (window as any).setMasterVolume = (vol: number) => {
+        masterVolumeRef.current = vol; 
+      };
+    }
+
     audioLoader.load('/sounds/rocket-launch.mp3', (buffer) => {
       launchSound.setBuffer(buffer);
       launchSound.setVolume(0.5);
@@ -150,17 +167,18 @@ export default function FireworksOnlyCursor() {
 
     const playSound = (sound: THREE.Audio, volume: number = 1.0) => {
       if (!isTabVisible) return;
+      if (masterVolumeRef.current === 0) return; 
 
-        if (sound.isPlaying) {
-            const clone = sound.clone();
-            clone.setVolume(clone.getVolume() * volume);
-            clone.play();
-        } else {
-            const originalVolume = sound.getVolume();
-            sound.setVolume(originalVolume * volume);
-            sound.play();
-            setTimeout(() => sound.setVolume(originalVolume), 100);
-        }
+      // Always clone to avoid volume conflicts
+      const clone = sound.clone();
+      const baseVolume = sound.getVolume();
+      clone.setVolume(baseVolume * volume * masterVolumeRef.current);
+      clone.play();
+      
+      // Clean up clone after it finishes
+      clone.onEnded = () => {
+        clone.disconnect();
+      };
     };
 
     const stopSound = (sound: THREE.Audio) => {
