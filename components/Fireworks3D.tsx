@@ -169,6 +169,11 @@ export default function FireworksOnlyCursor() {
       if (!isTabVisible) return;
       if (masterVolumeRef.current === 0) return; 
 
+      const context = audioListener.context; 
+      if (context.state === 'suspended') {
+        context.resume();
+      }
+
       // Always clone to avoid volume conflicts
       const clone = sound.clone();
       const baseVolume = sound.getVolume();
