@@ -95,6 +95,8 @@ export default function FireworksOnlyCursor() {
   useEffect(() => {
     if (!containerRef.current || !userLocation) return;
 
+    let isTabVisible = true; 
+
     // Initialize Pusher
     const pusher = new Pusher(process.env.NEXT_PUBLIC_PUSHER_KEY!, {
         cluster: process.env.NEXT_PUBLIC_PUSHER_CLUSTER!,
@@ -147,6 +149,8 @@ export default function FireworksOnlyCursor() {
     });
 
     const playSound = (sound: THREE.Audio, volume: number = 1.0) => {
+      if (!isTabVisible) return;
+
         if (sound.isPlaying) {
             const clone = sound.clone();
             clone.setVolume(clone.getVolume() * volume);
@@ -164,6 +168,54 @@ export default function FireworksOnlyCursor() {
             sound.stop();
         }
     }
+
+    const stopAllSounds = () => {
+      stopSound(launchSound);
+      stopSound(explosionSound);
+    }
+
+    // Clear all fireworks and rockets 
+    const clearAllFireworks = () => {
+      fireworks.current.forEach(fw => {
+        scene.remove(fw.mesh);
+        fw.mesh.geometry.dispose(); 
+        (fw.mesh.material as THREE.Material).dispose();
+
+        const sharedMaterial = fw.trailMeshes[0]?.material;
+        fw.trailMeshes.forEach(tm => {
+          scene.remove(tm);
+          tm.geometry.dispose(); 
+        });
+        if (sharedMaterial) {
+          (sharedMaterial as THREE.Material).dispose();
+        }
+      }); 
+      fireworks.current = [];
+
+      // Clear all rockets
+      rockets.current.forEach(rocket => {
+        scene.remove(rocket.mesh);
+        scene.remove(rocket.trail);
+        rocket.mesh.geometry.dispose(); 
+        (rocket.mesh.material as THREE.Material).dispose();
+        rocket.trail.geometry.dispose();
+        (rocket.trail.material as THREE.Material).dispose();
+      });
+      rockets.current = [];
+    };
+
+    // Helper function to handle minimizing the tab
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        isTabVisible = false;
+        stopAllSounds();
+        clearAllFireworks();
+      } else {
+        isTabVisible = true;
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // === STARS ===
     const starCount = 500; // Reduced from 800
@@ -289,6 +341,9 @@ export default function FireworksOnlyCursor() {
 
     // Launch rocket with distance-based scaling
     const launchRocket = (targetX: number, targetY: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0, zOffset: number = 0) => {
+      // Don't launch if tab is hidden
+      if (!isTabVisible) return color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
+      
       // Check rocket cap
       if (rockets.current.length >= MAX_ROCKETS) {
         cleanupOldRockets();
@@ -353,6 +408,9 @@ export default function FireworksOnlyCursor() {
 
     // Explosion with distance-based scaling
     const explode = (x: number, y: number, z: number, color?: THREE.Color, scale: number = 1.0, opacity: number = 1.0) => {
+      // Dont explode if tab is hidden
+      if (!isTabVisible) return;
+      
       // Check firework cap before creating new one
       if (fireworks.current.length >= MAX_FIREWORKS) {
         cleanupOldFireworks();
@@ -493,6 +551,7 @@ export default function FireworksOnlyCursor() {
 
     channel.bind('new-firework', (data: { x:number; y:number; clientId: string; color: number; latitude?: number; longitude?: number }) => {
         if (data.clientId === clientId.current) return;
+        if (!isTabVisible) return;
         
         const worldX = data.x * 300 - 150;
         const worldY = data.y * 150 - 75;
@@ -520,6 +579,8 @@ export default function FireworksOnlyCursor() {
     });
 
     channel.bind('happy-new-year', () => {
+      if (!isTabVisible) return;
+
       const fireworkCount = 15; // Reduced from 20
       const centerY = 0;
       
@@ -535,9 +596,14 @@ export default function FireworksOnlyCursor() {
     window.addEventListener("click", handleClick);
 
     let frameCount = 0;
+    let animationFrameId: number; 
 
     const animate = () => {
-      requestAnimationFrame(animate);
+      animationFrameId = requestAnimationFrame(animate);
+
+      // Pause animation when tab is hidden
+      if (!isTabVisible) return;
+
       const time = Date.now() * 0.001;
       frameCount++;
 
@@ -659,9 +725,13 @@ export default function FireworksOnlyCursor() {
     return () => {
       window.removeEventListener("click", handleClick);
       window.removeEventListener("resize", onResize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      cancelAnimationFrame(animationFrameId);
       channel.unbind_all();
       channel.unsubscribe();
       pusher.disconnect();
+      stopAllSounds();
+      clearAllFireworks();
       renderer.dispose();
       starMaterial.dispose();
       starGeometry.dispose();
