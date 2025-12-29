@@ -431,28 +431,18 @@ export default function FireworksOnlyCursor() {
         let opacity = 1.0;
         let zOffset = 0;
 
-        const testLocation = {
-          latitude: 35.6762,
-          longitude: 139.6503
-        }
-
-        console.log(`External Latitude: ${data.latitude!}, External Longitude: ${data.longitude!}`);
-        console.log(`User Latitude: ${userLocation.latitude}, User Longitude: ${userLocation.longitude}`);
-
         if (data.latitude && data.longitude) {
           const distance = calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
-            testLocation.latitude,
-            testLocation.longitude
+            data.latitude,
+            data.longitude
           );
           const scaleData = getFireworkScale(distance);
           scale = scaleData.scale;
           opacity = scaleData.opacity;
           zOffset = scaleData.zOffset;
         }
-
-        console.log(`Scale: ${scale}, Opacity: ${opacity}, zOffset: ${zOffset}`);
         
         launchRocket(worldX, worldY, color, scale, opacity, zOffset);
     });
