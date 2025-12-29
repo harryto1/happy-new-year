@@ -417,6 +417,11 @@ export default function FireworksOnlyCursor() {
         let opacity = 1.0;
         let zOffset = 0;
 
+        const testLocation = {
+          latitude: 35.6752,
+          longitude: 139.7528
+        }
+
         console.log(`External Latitude: ${data.latitude!}, External Longitude: ${data.longitude!}`);
         console.log(`User Latitude: ${userLocation.latitude}, User Longitude: ${userLocation.longitude}`);
 
@@ -424,8 +429,8 @@ export default function FireworksOnlyCursor() {
           const distance = calculateDistance(
             userLocation.latitude,
             userLocation.longitude,
-            data.latitude,
-            data.longitude
+            testLocation.latitude,
+            testLocation.longitude
           );
           const scaleData = getFireworkScale(distance);
           scale = scaleData.scale;
