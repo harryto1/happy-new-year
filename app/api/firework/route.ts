@@ -9,9 +9,40 @@ const pusher = new Pusher({
     useTLS: true,
 });
 
+const rateLimitMap = new Map<string, number[]>(); 
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [clientId, timestamps] of rateLimitMap.entries()) {
+        const filtered = timestamps.filter(t => now - t < 1000);
+        if (filtered.length === 0) {
+            rateLimitMap.delete(clientId);
+        } else {
+            rateLimitMap.set(clientId, filtered);
+        }
+    }
+}, 1 * 60 * 1000);
+
 export async function POST(request: NextRequest) {
     try {
         const { x, y, clientId, color, latitude, longitude } = await request.json();
+
+        const now = Date.now();
+
+        if (!rateLimitMap.has(clientId)) {
+            rateLimitMap.set(clientId, []);
+        }
+
+        const timestamps = rateLimitMap.get(clientId)!;
+
+        const recentTimestamps = timestamps.filter(t => now - t < 1000);
+
+        if (recentTimestamps.length >= 10) {
+            return NextResponse.json({ error: 'Rate limit exceeded. Maximum 10 fireworks per second.' }, { status: 429 });
+        }
+
+        recentTimestamps.push(now);
+        rateLimitMap.set(clientId, recentTimestamps);
 
         const channel = process.env.NODE_ENV === 'production'
             ? 'fireworks-channel-production'
