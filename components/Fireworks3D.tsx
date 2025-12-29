@@ -591,7 +591,7 @@ export default function FireworksOnlyCursor() {
 
         // Adjust gravity based on scale - smaller/distant fireworks have less gravity 
         const storedScale = (fw.mesh as any).fireworkScale || 1.0;
-        const gravity = 0.01 * Math.max(storedScale, 0.4);
+        const gravity = 0.01 * storedScale;
 
         for (let j = 0; j < particleCount; j++) {
           const idx = j * 3;
@@ -608,7 +608,7 @@ export default function FireworksOnlyCursor() {
             
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = 8;
+            const maxHistory = Math.max(4, Math.floor(8 * storedScale));
             if (history.length > maxHistory) {
               history.shift();
             }
