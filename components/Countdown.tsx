@@ -13,9 +13,8 @@ export default function Countdown() {
     const [isNewYear, setIsNewYear] = useState(false);
     const [flashColor, setFlashColor] = useState<"red" | "white">("white");
 
-    const targetDate = new Date(Date.now() + 5 * 1000);
-
     useEffect(() => {
+        const targetDate = new Date('2026-01-01T00:00:00');
         let hasTriggeredNewYear = false;
 
         const calculateTimeLeft = () => {
