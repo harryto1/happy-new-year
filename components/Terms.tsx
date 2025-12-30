@@ -5,23 +5,24 @@ import { Info, X } from "lucide-react";
 
 export default function Terms() {
     const [isOpen, setIsOpen] = useState(false);
-    const [isActive, setIsActive] = useState(false);
+    const [isActive, setIsActive] = useState(true);
 
     useEffect(() => {
-        setIsActive(true);
         const timer = setTimeout(() => {
             setIsActive(false);
         }, 3000);
 
         return () => clearTimeout(timer);
-    }, []);
+    }, [isActive]); 
 
     const handleClick = (e: React.MouseEvent) => {
         e.stopPropagation();
     };
 
     const handleInteraction = () => {
-        setIsActive(true);
+        if (!isActive) {
+            setIsActive(true);
+        }
     }
 
   return (

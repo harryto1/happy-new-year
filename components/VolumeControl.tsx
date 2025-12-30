@@ -7,7 +7,7 @@ export default function VolumeControl() {
     const [volume, setVolume] = useState(70);
     const [isMuted, setIsMuted] = useState(false);
     const [previousVolume, setPreviousVolume] = useState(70);
-    const [isActive, setIsActive] = useState(false);
+    const [isActive, setIsActive] = useState(true);
 
     useEffect(() => {
         // Get saved volume from localStorage
@@ -35,14 +35,14 @@ export default function VolumeControl() {
         }
     }, [volume, isMuted]);
 
+    // Auto-fade timer - resets when isActive changes
     useEffect(() => {
-        setIsActive(true);
         const timer = setTimeout(() => {
             setIsActive(false);
         }, 3000);
 
         return () => clearTimeout(timer);
-    }, [volume, isMuted]);
+    }, [isActive]);
 
     const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newVolume = parseInt(e.target.value);
@@ -72,7 +72,9 @@ export default function VolumeControl() {
     }
 
     const handleInteraction = () => {
-        setIsActive(true);
+        if (!isActive) {
+            setIsActive(true);
+        }
     }
 
     return (
