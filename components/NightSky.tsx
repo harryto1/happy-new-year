@@ -3,6 +3,7 @@
 import Fireworks3D from "@/components/Fireworks3D";
 import Countdown from "@/components/Countdown";
 import VolumeControl from "./VolumeControl";
+import Terms from "./Terms";
 
 export default function NightSky() {
   return (
@@ -10,6 +11,7 @@ export default function NightSky() {
       <Countdown />
       <Fireworks3D />
       <VolumeControl />
+      <Terms />
     </div>
   );
 }
