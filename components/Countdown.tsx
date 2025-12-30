@@ -125,7 +125,7 @@ export default function Countdown() {
                         y="50%"
                         textAnchor="middle"
                         dominantBaseline="middle"
-                        fontFamily="'Dancing Script', 'Brush Script MT', cursive"
+                        fontFamily="var(--font-dancing-script), 'Brush Script MT', cursive"
                         fontSize="80"
                         fill="url(#textGradient)"
                         filter="url(#glow)"
@@ -136,8 +136,6 @@ export default function Countdown() {
                 </svg>
 
                 <style jsx>{`
-                    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
-                    
                     .writing-animation {
                         stroke-dasharray: 2000;
                         stroke-dashoffset: 2000;
