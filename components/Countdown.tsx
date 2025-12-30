@@ -13,8 +13,9 @@ export default function Countdown() {
     const [isNewYear, setIsNewYear] = useState(false);
     const [flashColor, setFlashColor] = useState<"red" | "white">("white");
 
+    const targetDate = new Date(Date.now() + 5 * 1000);
+
     useEffect(() => {
-        const targetDate = new Date('2026-01-01T00:00:00');
         let hasTriggeredNewYear = false;
 
         const calculateTimeLeft = () => {
@@ -100,9 +101,66 @@ export default function Countdown() {
     if (isNewYear) {
         return (
             <div className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
-                <h1 className="text-4xl md:text-6xl lg:text-8xl font-bold text-transparent bg-clip-text bg-linear-to-r from-yellow-400 via-pink-500 to-purple-600 animate-pulse text-center px-4">
-                    🎉 Happy New Year {new Date().getFullYear()}! 🎉
-                </h1>
+                <svg 
+                    viewBox="0 0 1000 200" 
+                    className="w-full max-w-4xl px-4"
+                >
+                    <defs>
+                        <linearGradient id="textGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style={{ stopColor: '#fbbf24', stopOpacity: 1 }} />
+                            <stop offset="50%" style={{ stopColor: '#ec4899', stopOpacity: 1 }} />
+                            <stop offset="100%" style={{ stopColor: '#a855f7', stopOpacity: 1 }} />
+                        </linearGradient>
+                        
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                    </defs>
+                    
+                    <text
+                        x="50%"
+                        y="50%"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontFamily="'Dancing Script', 'Brush Script MT', cursive"
+                        fontSize="80"
+                        fill="url(#textGradient)"
+                        filter="url(#glow)"
+                        className="writing-animation"
+                    >
+                        Happy New Year 2026!
+                    </text>
+                </svg>
+
+                <style jsx>{`
+                    @import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap');
+                    
+                    .writing-animation {
+                        stroke-dasharray: 2000;
+                        stroke-dashoffset: 2000;
+                        stroke: url(#textGradient);
+                        stroke-width: 2;
+                        fill: transparent;
+                        animation: write 3s ease-in-out forwards, fillIn 1s ease-in-out 3s forwards;
+                    }
+
+                    @keyframes write {
+                        to {
+                            stroke-dashoffset: 0;
+                        }
+                    }
+
+                    @keyframes fillIn {
+                        to {
+                            fill: url(#textGradient);
+                            stroke-width: 0;
+                        }
+                    }
+                `}</style>
             </div>
         );
     }

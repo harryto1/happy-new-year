@@ -539,6 +539,102 @@ export default function FireworksOnlyCursor() {
       (points as any).fireworkOpacity = opacity;
     };
 
+    const explodeHuge = (x: number, y: number, z: number, color?: THREE.Color) => {
+      if (!isTabVisible) return;
+
+      const particleColor = color || new THREE.Color().setHSL(Math.random(), 1, 0.6);
+
+      // Create multiple layers of explosions for huge effect
+      const layers = 3;
+
+      for (let layer = 0; layer < layers; layer++) {
+        setTimeout(() => {
+          const layerScale = 2.5 - (layer * 0.3); // Each layer slightly smaller
+          const layerOpacity = 1.0 - (layer * 0.2);
+
+          const count = 120; 
+          const geometry = new THREE.BufferGeometry();
+          const positions = new Float32Array(count * 3);
+          const velocities = new Float32Array(count * 3);
+
+          for (let i = 0; i < count; i++) {
+            positions[i * 3] = x; 
+            positions[i * 3 + 1] = y;
+            positions[i * 3 + 2] = z;
+
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+            const speed = (Math.random() * 0.8 + 0.5) * layerScale;
+
+            velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed * 0.5; // Slower horizontal speed
+            velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed * 0.5; // Slower vertical speed
+            velocities[i * 3 + 2] = Math.cos(phi) * speed * 0.3; // Reduced z speed
+          }
+
+          geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+          // Vary colors slightly for each layer
+          const layerColor = particleColor.clone();
+          layerColor.offsetHSL(layer * 0.05, 0, 0);
+
+          const material = new THREE.PointsMaterial({
+            size: 0.25 * layerScale,
+            transparent: true,
+            opacity: layerOpacity,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            color: layerColor,
+          });
+
+          const points = new THREE.Points(geometry, material);
+          scene.add(points);
+
+          const trailMeshes: THREE.Mesh[] = [];
+
+          const sharedTrailMaterial = new THREE.MeshBasicMaterial({
+            color: layerColor,
+            transparent: true,
+            opacity: 0.6 * layerOpacity,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide,
+          });
+
+          // Add trails to all particles for huge firework
+          for (let i = 0; i < count; i++) {
+            const curve = new THREE.CatmullRomCurve3([
+              new THREE.Vector3(x, y, z),
+              new THREE.Vector3(x, y, z),
+            ]);
+
+            const tubeGeometry = new THREE.TubeGeometry(curve, 4, 0.06 * layerScale, 3, false); // Reduced segments
+
+            const trailMesh = new THREE.Mesh(tubeGeometry, sharedTrailMaterial);
+            trailMesh.frustumCulled = true;
+            scene.add(trailMesh);
+            trailMeshes.push(trailMesh);
+
+            (trailMesh as any).particleHistory = [new THREE.Vector3(x, y, z)];
+          }
+
+          fireworks.current.push({
+            mesh: points,
+            velocities,
+            life: 150,
+            trailMeshes,
+            priority: 100,
+          });
+
+          (points as any).fireworkScale = layerScale;
+          (points as any).fireworkOpacity = layerOpacity;
+          (points as any).isHuge = true;
+
+          // Play explosion sound with full volume
+          playSound(explosionSound, 1.0);
+
+        }, layer * 200); // Stagger the layers
+      }
+    };
+
     const getClickWorldPosition = (event: MouseEvent) => {
       mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
       mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -604,7 +700,24 @@ export default function FireworksOnlyCursor() {
     channel.bind('happy-new-year', () => {
       if (!isTabVisible) return;
 
-      const fireworkCount = 15; // Reduced from 20
+      // Launch one massive centerpiece firework first
+      setTimeout(() => {
+        const centerX = 0;
+        const centerY = 10;
+        const hugeColor = new THREE.Color().setHSL(0.15, 1, 0.6); // Golden color
+
+        // Launch a huge rocket
+        const hugeRocketColor = launchRocket(centerX, centerY, hugeColor, 2.0, 1.0, 0);
+
+        // Store reference to create huge explosion
+        (window as any).hugeFireworkPending ={
+          color: hugeRocketColor,
+          targetX: centerX,
+          targetY: centerY,
+        };
+      }, 4250);
+
+      const fireworkCount = 20; // Reduced from 20
       const centerY = 0;
       
       for (let i = 0; i < fireworkCount; i++) {
@@ -612,7 +725,7 @@ export default function FireworksOnlyCursor() {
           const randomX = (Math.random() - 0.5) * 200;
           const color = new THREE.Color().setHSL(Math.random(), 1, 0.6);
           launchRocket(randomX, centerY, color);
-        }, i * 150); // Slightly longer delay
+        }, i * Math.floor(Math.random() * 200)); // Slightly longer delay
       }
     });
 
@@ -654,7 +767,15 @@ export default function FireworksOnlyCursor() {
           const storedColor = (rocket.mesh as any).fireworkColor;
           const storedScale = (rocket.mesh as any).fireworkScale || 1.0;
           const storedOpacity = (rocket.mesh as any).fireworkOpacity || 1.0;
-          explode(rocket.mesh.position.x, rocket.mesh.position.y, rocket.mesh.position.z, storedColor, storedScale, storedOpacity);
+
+          // Check if this is the huge firework
+          const isHugeFirework = storedScale >= 2.0;
+
+          if (isHugeFirework) {
+            explodeHuge(rocket.mesh.position.x, rocket.mesh.position.y, rocket.mesh.position.z, storedColor);
+          } else {
+            explode(rocket.mesh.position.x, rocket.mesh.position.y, rocket.mesh.position.z, storedColor, storedScale, storedOpacity);
+          }
           
           scene.remove(rocket.mesh);
           scene.remove(rocket.trail);
@@ -674,7 +795,10 @@ export default function FireworksOnlyCursor() {
 
         // Adjust gravity based on scale - smaller/distant fireworks have less gravity 
         const storedScale = (fw.mesh as any).fireworkScale || 1.0;
-        const gravity = 0.01 * storedScale;
+        const isHuge = (fw.mesh as any).isHuge || false;
+
+        // Huge fireworks have even less gravity
+        const gravity = isHuge ? 0.0025 * storedScale : 0.01 * storedScale;
 
         for (let j = 0; j < particleCount; j++) {
           const idx = j * 3;
@@ -691,7 +815,7 @@ export default function FireworksOnlyCursor() {
             
             history.push(new THREE.Vector3(pos[idx], pos[idx + 1], pos[idx + 2]));
             
-            const maxHistory = Math.max(4, Math.floor(8 * storedScale));
+            const maxHistory = isHuge ? 16 : Math.max(4, Math.floor(8 * storedScale));
             if (history.length > maxHistory) {
               history.shift();
             }
@@ -708,11 +832,11 @@ export default function FireworksOnlyCursor() {
         fw.life--;
 
         const material = fw.mesh.material as THREE.PointsMaterial;
-        material.opacity = fw.life / 100;
+        material.opacity = fw.life / (isHuge ? 150 : 100);
 
         if (fw.trailMeshes.length > 0) {
           const trailMat = fw.trailMeshes[0].material as THREE.MeshBasicMaterial;
-          trailMat.opacity = (fw.life / 100) * 0.5;
+          trailMat.opacity = (fw.life / (isHuge ? 150 : 100)) * 0.5;
         }
 
         if (fw.life <= 0) {
