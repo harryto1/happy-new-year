@@ -122,7 +122,7 @@ export default function Countdown() {
                     
                     <text
                         x="50%"
-                        y="50%"
+                        y="40%"
                         textAnchor="middle"
                         dominantBaseline="middle"
                         fontFamily="var(--font-dancing-script), 'Brush Script MT', cursive"
@@ -132,6 +132,20 @@ export default function Countdown() {
                         className="writing-animation"
                     >
                         Happy New Year 2026!
+                    </text>
+                    <text
+                        x="50%"
+                        y="70%"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fontFamily="var(--font-dancing-script), 'Brush Script MT', cursive"
+                        fontSize="40"
+                        fill="url(#textGradient)"
+                        filter="url(#glow)"
+                        className="writing-animation"
+                        style={{ animationDelay: '3s' }}
+                    >
+                        Come back next year!
                     </text>
                 </svg>
 
